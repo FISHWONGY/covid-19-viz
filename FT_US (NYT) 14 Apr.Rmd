@@ -118,7 +118,7 @@ nyt <- nyt_curve %>%
         #plot.subtitle = element_text(hjust = 1.06, color = "gray30", family="ITC Officina Sans LT Book"),
         plot.caption = element_text(hjust = 0, size = 11, family="ITC Officina Sans LT Book")) 
 
-ggsave("US_case(8 Apr).png", 
+ggsave("US_case(14 Apr).png", 
        nyt, width = 11, height = 12, dpi = 300)
 ```
 
@@ -226,7 +226,7 @@ us_death <- nyt_death %>%
         #plot.subtitle = element_text(hjust = 1.06, color = "gray30", family="ITC Officina Sans LT Book"),
         plot.caption = element_text(hjust = 0, size = 11, family="ITC Officina Sans LT Book")) 
 
-ggsave("US_death(8 Apr).png", 
+ggsave("US_death(14 Apr).png", 
        us_death, width = 11, height = 12, dpi = 300)
 ```
 
@@ -394,34 +394,6 @@ us_50 <- nyt_curve  %>%
           axis.text.x = element_text(size = rel(0.5)),
           legend.text = element_text(size = rel(1)))
 
-ggsave("US50(8 Apr).png", 
+ggsave("US50(14 Apr).png", 
        us_50, width = 11, height = 12, dpi = 300)
-```
-
-```{r}
-
-```
-
-```{r}
-
-```
-
-```{r}
-
-```
-
-```{r}
-
-```
-
-```{r}
-
-```
-
-```{r}
-
-```
-
-```{r}
-
 ```
