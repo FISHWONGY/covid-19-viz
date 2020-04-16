@@ -1,6 +1,6 @@
 # covid-19-viz
 
-This repository is commit for the visualisation work related to the Covid-19 epidemic
+This repository is committed for the visualisation work related to the Covid-19 epidemic
 
 ![](17_Apr_20/mobility_patch.png)
 
