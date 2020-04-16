@@ -1,0 +1,504 @@
+```{r}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(tidycovid19)
+  library(pdftools)
+  library(png)
+  library(countrycode)
+})
+```
+
+```{r}
+pdf_url <- "https://www.gstatic.com/covid19/mobility/2020-04-05_DE_Mobility_Report_en.pdf"
+
+pdf_convert(pdf_url, pages = 1, filenames = "google_cmr_de_p1.png", verbose = FALSE)
+```
+
+```{r}
+bitmaps <- tidycovid19:::extract_line_graph_bitmaps(pdf_url, 1)
+png_file <- tempfile("bitmap_", fileext = ".png")
+writePNG(bitmaps[[1]][[1]], "bitmap.png")
+```
+
+```{r}
+df <- tidycovid19:::parse_line_graph_bitmap(bitmaps[[1]][[1]])
+
+ggplot(data = df, aes(x = date, y = measure)) + 
+  geom_line(size = 2, color = "blue") + 
+  geom_ribbon(
+    aes(ymin = ifelse(measure > 0, 0, measure), ymax = 0), 
+    fill = "blue", alpha = 0.2
+  ) +
+  theme_minimal() +
+  scale_y_continuous(
+    name="Retail & recreation", limits=c(-0.8, 0.8),
+    breaks = c(-0.8, -0.4, 0, 0.4, 0.8)
+  ) +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank()
+  )
+
+```
+
+```{r}
+merged_dta <- download_merged_data(cached = TRUE, silent = TRUE)
+
+merged_dta %>% 
+  filter(iso3c == "DEU", date >= "2020-02-23") %>%
+  mutate(gov_interventions = (soc_dist + mov_rest)/
+           max(soc_dist + mov_rest, na.rm = TRUE),
+         lockdown = lockdown == 1) %>%
+  select(date, lockdown, gov_interventions, starts_with("gcmr_")) %>%
+  pivot_longer(cols = c(3:9), names_to = "measure", values_to = "value") %>%
+  na.omit() -> dta
+```
+
+```{r}
+ggplot(dta, aes(x = date, y = value, group = measure, color = measure)) + 
+  theme_minimal() +
+  annotate("rect", xmin = min(dta$date[dta$lockdown]), xmax = max(dta$date), 
+           ymin = -Inf, ymax = Inf, 
+           fill = "lightblue", color = NA, alpha = 0.2) +
+  geom_line()   
+```
+
+
+
+
+
+
+
+
+#Scraping google
+```{r}
+install.packages("needs")
+library(needs)
+needs(tidyverse, magrittr, animation, pdftools, png, scales)
+library(delabj)
+library(RcppRoll)
+library(ggrepel)
+```
+
+```{r}
+# Function that extracts data from Google Mobility PDFs
+process_google_mobility <- function(country_code, start_date, end_date){
+  
+  # Convert first page of PDF into high-res PNG
+  pdf_convert(paste0("https://www.gstatic.com/covid19/mobility/",end_date,"_",country_code,"_Mobility_Report_en.pdf"), format = "png", pages = 1, dpi = 300, filenames = "IMG1.png")
+  
+  # Convert second page of PDF into high-res PNG
+  pdf_convert(paste0("https://www.gstatic.com/covid19/mobility/",end_date,"_",country_code,"_Mobility_Report_en.pdf"), format = "png", pages = 2, dpi = 300, filenames = "IMG2.png")
+  
+  # Read PDF page one image into R as an array of red, green and blue pixel values
+  img <- readPNG("IMG1.png")
+  
+  # Rescale the pixel values from 0-1 into 0-255
+  r <- img[,,1] * 255
+  g <- img[,,2] * 255
+  b <- img[,,3] * 255
+  
+  # rgb(66,133,244) is the rgb specification of the blue line used in Google’s charts
+  
+  # retail chart extent is from pixel 1500 to 1786 vertically, and from 853 to 1328 left to right, so we loop through those pixels from left to right, and in each case
+  
+  val <- c(853:1328) %>%
+    map_dbl(~{
+      # find the vertical pixels that match our specified rgb() colour, and average them to get the middle pixel of the line on the chart
+      mean(which(
+        r[1500:1822,.x]==66 & g[1500:1822,.x]==133 & b[1500:1822,.x]==244
+      ))
+    }) %>%
+    # rescale this value so instead of being a pixel number, it’s a value from -100 to 80 (the domain of the y-axis)
+    scales::rescale(to=c(80, -100), from = c(1, 322))
+  # then generate a series of data values equal to the number of horizontal chart pixels, so we can match a date/time to every y-axis value
+  date <- seq.Date(as.Date(start_date), as.Date(end_date), length.out = length(val))
+  # then join values to dates, summarise by individual day (one value per day), and add columns specifying the chart’s subject matter and the country
+  retail <- tibble(date, val) %>%
+    group_by(date) %>%
+    summarise(val = mean(val)) %>%
+    mutate(measure = "Retail", country_code)
+  
+  # then repeat for parks and transit
+  
+  # parks
+  val <- c(853:1328) %>%
+    map_dbl(~{
+      mean(which(
+        r[2476:2798,.x]==66 & g[2476:2798,.x]==133 & b[2476:2798,.x]==244
+      ))
+    }) %>%
+    scales::rescale(to=c(80, -100), from = c(1, 322))
+  date <- seq.Date(as.Date(start_date), as.Date(end_date), length.out = length(val))
+  parks <- tibble(date, val) %>%
+    group_by(date) %>%
+    summarise(val = mean(val)) %>%
+    mutate(measure = "Parks", country_code)
+  
+  # transit is on page two, so we need to load in the new image
+  
+  img <- readPNG("IMG2.png")
+  
+  r <- img[,,1] * 255
+  g <- img[,,2] * 255
+  b <- img[,,3] * 255
+  
+  # transit
+  val <- c(785:1259) %>%
+    map_dbl(~{
+      mean(which(
+        r[222:544,.x]==66 & g[222:544,.x]==133 & b[222:544,.x]==244
+      ))
+    }) %>%
+    scales::rescale(to=c(80, -100), from = c(1, 322))
+  date <- seq.Date(as.Date(start_date), as.Date(end_date), length.out = length(val))
+  transit <- tibble(date, val) %>%
+    group_by(date) %>%
+    summarise(val = mean(val)) %>%
+    mutate(measure = "Transit", country_code)
+  
+  # then combine retail, parks and transit into one table, and return this
+  return(bind_rows(retail, parks, transit))
+  
+}
+
+# Loop through countries of interest, processing Google’s two reports (to date) for each of them, and joining them together
+countries <- c("GB", "US", "FR", "DE", "ES", "IT", "NO", "NL", "SE", "BE", "AT")
+countries %>%
+  map_dfr(~{
+    data <- bind_rows(
+      process_google_mobility(.x, "2020-02-16", "2020-03-29"),
+      process_google_mobility(.x, "2020-02-23", "2020-04-05")
+    ) 
+  }) -> GCM_master
+```
+
+```{r}
+# PLot this dataset as small multiples; one chart for each topic, one line on each per country
+GCM_master %>% 
+  # Get rid of any missing data
+  filter(!is.na(val)) %>%
+  # Make sure dates are read as dates (days) not date-times
+  mutate(
+    date = as.character(as.Date(date, "%Y-%m-%d")),
+    date = as.Date(date)
+  ) %>%
+  # Make sure we only have one value per country per topic per day
+  group_by(measure, date, country_code) %>%
+  summarise(val = mean(val)) %>%
+  group_by(measure, country_code) %>%
+  # Create a smoothed moving average to iron out noise in the daily data (if you want)
+  mutate(smoothed = roll_meanr(val, 7)) %>% 
+  # Filter for only a subset of countries of interest for this plot
+  filter(country_code %in% c("GB", "IT", "FR", "ES", "SE", "DE", "US")) %>%
+  
+  
+  # Plot moving average (or raw data) vs date
+  ggplot(aes(x = date, y = smoothed)) +
+  # Add a dark grid line for zero on the y-asix
+  geom_hline(yintercept = 0) +
+  # Draw one line per country
+  geom_line(aes(col = country_code), size = 0.5) +
+  
+  # Add a highlight for a country of focus, first adding a thicker white line to create a border behind the main one
+  geom_line(size = 1.5, data = . %>% filter(country_code == "GB"), col = "white") +
+  geom_line(size = 1, data = . %>% filter(country_code == "GB"), col = "black") +
+  
+  # Add country labels to the end of each line
+  geom_text_repel(aes(col = country_code, label = country_code), direction = "y", 
+                  data = . %>% group_by(country_code, measure) %>% top_n(1, date), hjust = 0,
+                  family = "ITC Officina Sans LT Book") +
+  # Clean up the x-axis
+ scale_x_date(limits = c(as.Date("2020-02-21"), as.Date("2020-04-14")), 
+               breaks = c(as.Date("2020-02-22"), as.Date("2020-04-05")), 
+               labels = function(x)format(x,"%d %b")) +
+  
+  # Duplicate y-axis for easy reading of values
+  scale_y_continuous(limits = c(-100, 40), breaks = seq(-80, 40, 20), expand = c(0,0), 
+                     sec.axis = dup_axis()) +
+  
+  # Small multiples: one chart per topic
+  facet_wrap(~measure, nrow = 1) +
+  
+  # Clean up the plot theme
+  #theme_minimal() +
+  theme_delabj() +
+  scale_color_delabj() +
+  labs(x = "\nDate",
+       title = "Mobility - Country level",
+       subtitle = "By destination") +
+  theme(
+    text = element_text(size = 12, family="ITC Officina Sans LT Book"),
+    axis.title.x = element_text(family = "ITC Officina Sans LT Bold"),
+    plot.title = element_text(size = 15, face = "bold", family="ITC Officina Sans LT Bold"),
+    plot.subtitle = element_text(hjust = 0, vjust = 2.5,family="ITC Officina Sans LT Book"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    axis.ticks = element_line(),
+    axis.title = element_blank(),
+    legend.position = "none"
+  )
+```
+
+
+#Apple map
+```{r}
+mobi <- suppressWarnings(read_csv("/Volumes/My Passport for Mac/R/convid-19/15 Apr 20/Mobility google/applemobilitytrends-2020-04-13.csv", na = "NULL"))
+```  
+
+```{r}
+mobi <- mobi %>% gather(key = "date", value = "val", "2020-01-13" : "2020-04-13")
+mobi$date <- as.Date(mobi$date, "%Y-%m-%d")
+```
+
+```{r}
+mobi <- as.data.frame(mobi)
+
+mobi$continent <- countrycode(sourcevar = mobi[, "region"],
+                            origin = "country.name",
+                            destination = "continent")
+
+mobi_c <- mobi %>% filter(geo_type == "country/region")
+
+mobi_c$transportation_type[mobi_c$transportation_type == "driving"] <- "Driving"
+mobi_c$transportation_type[mobi_c$transportation_type == "walking"] <- "Walking"
+mobi_c$transportation_type[mobi_c$transportation_type == "transit"] <- "Transit"
+mobi_c$region[mobi_c$region == "United States"] <- "US"
+```
+
+```{r}
+mobi_plot <- mobi_c %>%
+  mutate(smoothed = roll_meanr(val, 7)) %>% 
+  # Filter for only a subset of countries of interest for this plot
+  filter(region %in% c("UK", "Italy", "France", "Spain", "Sweden", "Germany", "US"))
+```
+
+```{r}
+country <- mobi_plot %>%
+  # Plot moving average (or raw data) vs date
+  ggplot(aes(date, smoothed)) +
+  # Draw one line per country
+  geom_line(aes(col = region), size = 0.5) +
+  
+  # Add a highlight for a country of focus, first adding a thicker white line to create a border behind the main one
+  #geom_line(size = 1.5, data = . %>% filter(region == "UK"), col = "white") +
+  #geom_line(size = 1, data = . %>% filter(region == "UK"), col = "black") +
+  
+  # Clean up the x-axis
+  scale_x_date(limits = c(as.Date("2020-02-21"), as.Date("2020-04-14")), 
+               breaks = c(as.Date("2020-02-22"), as.Date("2020-04-05")), 
+               labels = function(x)format(x,"%d %b")) +
+  
+  # Duplicate y-axis for easy reading of values
+  scale_y_continuous(limits = c(0, 150), breaks = seq(0, 140, 20), 
+                     expand = c(0,0), 
+                     sec.axis = dup_axis()) +
+  
+  # Small multiples: one chart per topic
+  facet_wrap(~transportation_type, nrow = 1) +
+  
+  # Clean up the plot theme
+  #theme_minimal() +
+  theme_delabj() +
+  scale_color_delabj(name = "") +
+  labs(x = "Date",
+       title = "Mobility - Country level") +
+  theme(
+    text = element_text(size = 12, family="ITC Officina Sans LT Book"),
+    axis.title.x = element_text(family = "ITC Officina Sans LT Bold"),
+    plot.title = element_text(size = 15, family="ITC Officina Sans LT Bold"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    axis.ticks = element_line(),
+    axis.title = element_blank(),
+    legend.position = "top"
+  ) +
+  ggsave("/Volumes/My Passport for Mac/R/convid-19/15 Apr 20/Photo/mobility/apple_mobility.png", dpi = 320, width = 12, height = 8)
+```
+
+```{r}
+mobi_plot2 <- aggregate(mobi_c$val, list(mobi_c$transportation_type, mobi_c$date, mobi_c$continent), mean)
+```
+
+```{r}
+colnames(mobi_plot2) <- c("trans", "date", "region", "val")
+```
+
+```{r}
+mobi_plot2 <- mobi_plot2 %>%
+  mutate(smoothed = roll_meanr(val, 7))
+```
+
+```{r}
+mobi_plot2 <- mobi_plot2 %>%
+  mutate(end_label = ifelse(date == max(date), region, NA))
+mobi_plot2
+```
+
+```{r}
+conti <- mobi_plot2 %>%
+  # Plot moving average (or raw data) vs date
+  ggplot(aes(x = date, y = smoothed, color = region,  group = region)) +
+  # Draw one line per country
+  geom_line(size = 0.5) +
+  
+  # Clean up the x-axis
+  scale_x_date(limits = c(as.Date("2020-02-21"), as.Date("2020-04-14")), 
+               breaks = c(as.Date("2020-02-22"), as.Date("2020-04-05")), 
+               labels = function(x)format(x,"%d %b")) +
+  
+  # Duplicate y-axis for easy reading of values
+  scale_y_continuous(limits = c(0, 150), breaks = seq(0, 140, 20), 
+                     expand = c(0,0), 
+                     sec.axis = dup_axis()) +
+  #Add end label
+  #geom_text_repel(nudge_x = -0.5,
+   #               nudge_y = 2,
+    #              segment.color = NA,
+     #             size = 3,
+      #            family="ITC Officina Sans LT Bold") + 
+  # Small multiples: one chart per topic
+  facet_wrap(~trans, nrow = 1) +
+  
+  # Clean up the plot theme
+  #theme_minimal() +
+  theme_delabj() +
+  scale_color_delabj(name = "") +
+  labs(x = "\nDate",
+       title = "Mobility - Continent level",
+       subtitle = "By transportation type",
+       caption = "Sources: Apple Maps; Google\n  www.fishwongy.com") +
+  theme(
+    text = element_text(size = 12, family="ITC Officina Sans LT Book"),
+    plot.title.position = "plot",
+    plot.title = element_text(size = 15, family="ITC Officina Sans LT Bold"),
+    plot.caption = element_text(hjust = -0.18, size = 11, family="ITC Officina Sans LT Book"),
+    axis.title.x = element_text(family = "ITC Officina Sans LT Bold"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    axis.ticks = element_line(),
+    axis.title = element_blank(),
+    legend.position = "top"
+  ) 
+  #ggsave("/Volumes/My Passport for Mac/R/convid-19/15 Apr 20/Photo/mobility/cont_mobility.png", dpi = 320, width = 12, height = 8)
+```
+
+```{r}
+# patchwork
+ft / (conti | country) +
+  plot_annotation(#title = "States' rates", 
+                  #subtitle = "How is Covid-19 spreading in the US?",
+                  theme = theme(plot.title = element_text(size = 20), 
+                                plot.subtitle = element_text(size = 14))) &
+  theme(plot.title = element_text(family = "ITC Officina Sans LT Bold"),
+    text = element_text("ITC Officina Sans LT Book")) 
+
++
+  ggsave("/Volumes/My Passport for Mac/R/convid-19/15 Apr 20/Photo/mobility/mobility_patch.png", dpi = 320, width = 10.8, height = 12)
+```
+
+```{r}
+# create data frame of maps::world data
+worlddata <- map_data('world') %>% filter(region != "Antarctica") %>% fortify
+
+# modify country names to match food_consumption
+worlddata <- worlddata %>% mutate(region = str_replace(region, "United Kingdom", "UK"),
+                                  region = str_replace(region, "USA", "US"))
+
+#colnames(mobi_c)[2] <- "region"
+mobi_c_map <- mobi_c %>% filter(date == as.Date("2020-04-13"))
+mobi_c_map <- aggregate(mobi_c_map$val, list(mobi_c_map$region, mobi_c_map$date), mean)
+colnames(mobi_c_map) <- c("region", "date", "val")
+```
+
+
+```{r}
+#map <- 
+  ggplot() +
+  geom_map(data = worlddata, map = worlddata, aes(map_id = region), fill = 'grey90', colour = 'grey60', size = 0.5) +
+  expand_limits(x = worlddata$long, y = worlddata$lat) +
+  geom_map(data = mobi_c_map, map = worlddata,
+           aes(fill = val, map_id = region), alpha = 0.8) +
+   scale_fill_distiller(palette = "YlOrBr", direction = 1, name = "Mobility",
+                     guide = guide_colorbar(direction = "horizontal", 
+                                            barheight = unit(2, units = "mm"),
+                                            barwidth = unit(50, units = "mm"),
+                                            draw.ulim = F, title.position = 'top', 
+                                            title.hjust = 0.5, label.hjust = 0.5)) +
+  theme(panel.background = element_rect(fill = 'white')) +
+  theme_delabj() +
+  labs(x = "", y = "",
+       title = "Where are you going?",
+       subtitle = "Mobility per country, April 2020") +
+  theme(axis.text = element_blank(), 
+        axis.ticks = element_blank(),
+        #legend.key.width = unit(2, 'cm'),
+        legend.position = 'top',
+        legend.title = element_text(family = 'ITC Officina Sans LT Book', size = 10),
+        legend.text = element_text(family = 'ITC Officina Sans LT Book', size = 9),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        text = element_text(size = 12, family="ITC Officina Sans LT Book"),
+        plot.title = element_text(size = 15, face = "bold", family="ITC Officina Sans LT Bold"),
+        plot.subtitle = element_text(hjust = 0, vjust = 2.5,family="ITC Officina Sans LT Book"),
+        plot.caption = element_text(hjust = 0, size = 10)) +
+  ggsave("/Volumes/My Passport for Mac/R/convid-19/15 Apr 20/Photo/mobility/map_mobility.png", dpi = 320, width = 12, height = 8)
+```
+
+scale_fill_distiller(palette = "YlOrBr",
+```{r}
+map <- 
+  ggplot() +
+  geom_map(data = worlddata, map = worlddata, aes(map_id = region), fill = 'grey90', colour = 'grey60', size = 0.5) +
+  expand_limits(x = worlddata$long, y = worlddata$lat) +
+  geom_map(data = mobi_c_map, map = worlddata,
+           aes(fill = val, map_id = region), alpha = 0.8) +
+   scale_fill_viridis(option = "inferno", direction = -1, name = "Mobility",
+                     guide = guide_colorbar(direction = "horizontal", 
+                                            barheight = unit(2, units = "mm"),
+                                            barwidth = unit(50, units = "mm"),
+                                            draw.ulim = F, title.position = 'top', 
+                                            title.hjust = 0.5, label.hjust = 0.5)) +
+  theme(panel.background = element_rect(fill = 'white')) +
+  theme_delabj() +
+  labs(x = "", y = "",
+       title = "Where are you going?",
+       subtitle = "Mobility per country, April 2020") +
+  theme(axis.text = element_blank(), 
+        axis.ticks = element_blank(),
+        #legend.key.width = unit(2, 'cm'),
+        legend.position = 'top',
+        legend.title = element_text(family = 'ITC Officina Sans LT Book', size = 10),
+        legend.text = element_text(family = 'ITC Officina Sans LT Book', size = 9),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        text = element_text(size = 12, family="ITC Officina Sans LT Book"),
+        plot.title = element_text(size = 15, face = "bold", family="ITC Officina Sans LT Bold"),
+        plot.subtitle = element_text(hjust = 0, vjust = 2.5,family="ITC Officina Sans LT Book"),
+        plot.caption = element_text(hjust = 0, size = 10)) +
+  ggsave("/Volumes/My Passport for Mac/R/convid-19/15 Apr 20/Photo/mobility/map_mobility2.png", dpi = 320, width = 12, height = 8)
+```
+
+
+
+```{r}
+# patchwork
+map / (conti | ft) +
+  plot_annotation(#title = "States' rates", 
+                  #subtitle = "How is Covid-19 spreading in the US?",
+                  theme = theme(plot.title = element_text(size = 20)))& 
+                                #plot.subtitle = element_text(size = 14))) &
+  theme(plot.title = element_text(family = "ITC Officina Sans LT Bold"),
+    text = element_text("ITC Officina Sans LT Book")) 
+
++
+  ggsave("/Volumes/My Passport for Mac/R/convid-19/15 Apr 20/Photo/mobility/mobility_patch2.png", dpi = 320, width = 10.8, height = 12)
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
