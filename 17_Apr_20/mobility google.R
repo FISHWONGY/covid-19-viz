@@ -143,7 +143,7 @@ GCM_master %>%
 
 # Apple map
 
-mobi <- suppressWarnings(read_csv("/Volumes/My Passport for Mac/R/convid-19/15 Apr 20/Mobility google/applemobilitytrends-2020-04-13.csv", na = "NULL"))
+mobi <- suppressWarnings(read_csv("~/applemobilitytrends-2020-04-13.csv", na = "NULL"))
 
 mobi <- mobi %>% gather(key = "date", value = "val", "2020-01-13" : "2020-04-13")
 mobi$date <- as.Date(mobi$date, "%Y-%m-%d")
@@ -246,7 +246,7 @@ ft / (conti | country) +
     text = element_text("ITC Officina Sans LT Book")) 
 
 +
-  ggsave("/Volumes/My Passport for Mac/R/convid-19/15 Apr 20/Photo/mobility/mobility_patch.png", dpi = 320, width = 10.8, height = 12)
+  ggsave("mobility_patch.png", dpi = 320, width = 10.8, height = 12)
 
 # create data frame of maps::world data
 worlddata <- map_data('world') %>% filter(region != "Antarctica") %>% fortify
