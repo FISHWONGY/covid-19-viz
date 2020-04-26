@@ -18,3 +18,5 @@ tm_shape(w_yesterday2) +
           
 interactive <- tmap_leaflet(interactive)
 interactive
+
+saveWidget(interactive, "US_map.html")
