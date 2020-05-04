@@ -1,0 +1,98 @@
+```{r}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(tidycovid19)
+  library(paletteer)
+  library(ggplot2)
+  library(delabj)
+  library(patchwork)
+  library(sf)
+library(tmap)
+#library(dplyr)
+})
+```
+
+```{r}
+covid19_dta <- download_merged_data(silent = TRUE, cached = TRUE)
+```
+
+```{r}
+world_rnatural <- rnaturalearth::ne_download(returnclass = "sf")
+# names(world_iso) # variables available
+world_iso <- world_rnatural %>% 
+  select(NAME_LONG, ISO_A3_EH, POP_EST, GDP_MD_EST, CONTINENT)
+
+world_projected <- world_iso %>% 
+  st_transform("+proj=moll")
+```
+
+```{r}
+p <- dplyr::left_join(world_projected, covid19_dta, by = c("ISO_A3_EH"= "iso3c"))
+p$Area_km <- as.numeric(st_area(p)) / 1e6
+p$`Pop/km2` <- as.numeric(p$POP_EST) / p$Area_km 
+```
+
+```{r}
+p_yesterday <- p %>% 
+  filter(date == max(date, na.rm = T) - 1)
+plot(p_yesterday)
+```
+
+```{r}
+colnames(p_yesterday)[8] <- "Confirmed"
+colnames(p_yesterday)[9] <- "Deaths"
+colnames(p_yesterday)[10] <- "Recovered"
+```
+
+
+
+```{r}
+g <- st_graticule(p_yesterday)
+```
+
+```{r}
+#Moving the legend:
+tm_shape(g) +
+  tm_lines(col = "grey", alpha = .3) +
+  tm_shape(p_yesterday) +
+  tm_polygons(
+    c("Deaths", "Recovered"),
+    palette = "-viridis",
+    style = "log10_pretty"
+    ) +
+   tm_style("cobalt") +
+ # tm_scale_bar(color.dark = "gray60",
+  #  position = c("right", "bottom")) + 
+  tm_compass(type = "8star", size = 3, fontsize = 0.5, 
+    position = c("right", "top")) +
+  tm_layout(title = "Covid-19 data",title.size = 0.8,title.fontfamily = "ITC Officina Sans LT Bold", title.position = c("left", "top"),
+            legend.position = c(0.01, 0.25),
+            fontfamily = "ITC Officina Sans LT Book",
+            legend.title.fontfamily = "ITC Officina Sans LT Bold") +
+  tm_credits("Data till 26 Apr\nwww.fishwongy.com", position = c("left", "bottom"), size = 0.6) 
+  
+```
+
+```{r}
+tm_shape(g) +
+  tm_lines(col = "grey", alpha = 0.4) +
+  tm_shape(p_yesterday) +
+  tm_polygons() +
+  tm_style("cobalt") +
+  tm_layout(title = "Covid-19 data",title.size = 0.8,title.fontfamily = "ITC Officina Sans LT Bold", title.position = c("left", "top"),
+            legend.position = c(0.01, 0.35),
+            fontfamily = "ITC Officina Sans LT Book",
+            legend.title.fontfamily = "ITC Officina Sans LT Bold") +
+  tm_shape(p_yesterday) +
+  tm_fill(col = "#130140") + ##180057
+  tm_borders(lwd = 2, col = "#ffe4f2", alpha = 0.2)+
+   tm_compass(type = "8star", size = 3, fontsize = 0.5, position = c("right", "top")) +
+  tm_dots(
+    col = c("#ffe4f2", "#929cb0"),
+    size = c("Deaths", "Recovered"),
+    palette = "viridis",
+    style = "log10_pretty",
+    alpha = 0.7
+    ) +
+  tm_credits("Data till 26 Apr\nwww.fishwongy.com", position=c("left", "bottom"))
+```
