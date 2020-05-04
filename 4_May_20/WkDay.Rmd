@@ -109,5 +109,5 @@ ggplot(aes(x = day, y = count, fill = metric)) +
 
 ```{r}
 (glo_wk / usa_wk) +
-   ggsave("/Volumes/My Passport for Mac/R/convid-19/15 May 20/photo/WkDea_patch2.png", dpi = 320, width = 11.8, height = 12)
+   ggsave("~/WkDea_patch2.png", dpi = 320, width = 11.8, height = 12)
 ```
