@@ -1,0 +1,134 @@
+```{r}
+merged <- download_merged_data(cached = TRUE, silent = TRUE)
+merged <- merged %>% select(1:6)
+merged$active <- merged$confirmed - merged$recovered
+```
+
+```{r}
+merged %>% 
+  filter(date >= as.Date("2020-02-01")) %>%
+  filter(country %in% c("Italy", "Germany", "France", "Spain", "US", "United Kingdom")) %>%
+  mutate(end_label = ifelse(date == max(date) - 1, country, NA),
+         end_label = recode(end_label, `United Kingdom` = "UK")) %>%
+ # mutate(mode = recode(mode, `confirmed` = "New cases",
+  #                      `deaths` = "New deaths")) %>%
+
+ggplot(aes(x = date, y = active, label = end_label)) +
+  geom_line(size = 1.1, color = "#83B692") +
+  geom_text(nudge_x = -6.5,
+                  nudge_y = -5020.4,
+                  #segment.color = NA,
+                  color = "#721121",
+                  size = 5,
+                  family="ITC Officina Sans LT Bold") + 
+  theme_delabj() +
+  scale_y_continuous(position = "right") +
+  facet_wrap(~country, scales = "free", nrow = 3) +
+labs(x = "", y = "",
+     title = "'We are past the peak'\n",  
+     #title = "Daily new COVID-19 <b, style = 'color:#83B692'>cases</b> & <b, style = 'color:#721121'>deaths</b>",
+       subtitle = "<b, style = 'color:#83B692'>**Active cases**</b> over time\n",
+       caption = "Source: NYTimes; ECDC\nwww.fishwongy.com") +
+  theme(legend.position = "top",
+        text = element_text(size = 12, family="ITC Officina Sans LT Book"),
+        legend.text = element_text(size = 14),
+       plot.title.position = "plot",
+        plot.title = element_markdown(size = 26, family="ITC Officina Sans LT Bold"),
+        plot.subtitle = element_markdown(size = 20),
+        plot.caption = element_text(size = 16),
+        plot.caption.position = "plot", 
+          # turn off the strip label and tighten the panel spacing
+          strip.text = element_blank(),
+          axis.text.x = element_text(size=12, family="ITC Officina Sans LT Bold"),
+          axis.text.y = element_text(size=12),
+       panel.background = element_blank(),
+       panel.grid.major.x = element_blank(),
+       #panel.grid.minor = element_blank(),
+          panel.spacing.x = unit(-0.05, "lines"),
+          panel.spacing.y = unit(0.3, "lines"),
+          axis.title.x = element_text(size = 10),
+          axis.title.y = element_text(size = 10)) +
+   ggsave("~/peak.png", dpi = 320, width = 12.8, height = 12)
+```
+
+#Aggregate global by dplyr
+```{r}
+#glo_act <- 
+  merged %>% 
+  filter(date >= as.Date("2020-02-01")) %>%
+  group_by(date) %>%
+  summarise(sum_active = sum(active)) %>%   #Gpby + summarise = aggre
+  ungroup() %>%
+  mutate(end_label = ifelse(date == max(date) - 1, "Global", NA)) %>%
+ # mutate(mode = recode(mode, `confirmed` = "New cases",
+  #                      `deaths` = "New deaths")) %>%
+
+ggplot(aes(x = date, y = sum_active, label = end_label)) +
+  geom_line(size = 1.1, color = "#83B692") +
+  geom_text_repel(nudge_x = -1.1,
+                  nudge_y = -520.4,
+                  #segment.color = NA,
+                  color = "#721121",
+                  size = 3,
+                  family="ITC Officina Sans LT Bold") + 
+  theme_delabj() +
+ # facet_wrap(~country, scales = "free", nrow = 2) +
+labs(x = "", y = "",
+     title = "'We are past the peaek'",  
+     #title = "Daily new COVID-19 <b, style = 'color:#83B692'>cases</b> & <b, style = 'color:#721121'>deaths</b>",
+       subtitle = "<b, style = 'color:#83B692'>Active cases</b> over time\n",
+       caption = "") +
+  theme(legend.position = "top",
+        text = element_text(size = 12, family="ITC Officina Sans LT Book"),
+        legend.text = element_text(size = 14),
+       plot.title.position = "plot",
+          plot.title = element_markdown(size = 21, family="ITC Officina Sans LT Bold"),
+          plot.subtitle = element_markdown(size = 15),
+          plot.caption = element_text(hjust = 0, size = rel(1)),
+          # turn off the strip label and tighten the panel spacing
+          strip.text = element_blank(),
+          axis.text.x = element_text(size=12),
+          axis.text.y = element_text(size=12),
+       panel.grid.major = element_blank(),
+       panel.grid.minor = element_blank(),
+          panel.spacing.x = unit(-0.05, "lines"),
+          panel.spacing.y = unit(0.3, "lines"),
+          axis.title.x = element_text(size = 10),
+          axis.title.y = element_text(size = 10))
+```
+
+
+
+**Some failed code**
+```{r}
+#For confirmed
+urlfile="https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv"
+
+jh_con <- read_csv(url(urlfile))
+
+jh_con <- jh_con %>% filter(`Country/Region` != "Canada")
+
+jh_con <- gather(jh_con, key = "date", value = "confirmed", "1/22/20" : "5/3/20")
+jh_con$date <- as.Date(jh_con$date, "%m/%d/%y")
+
+
+#For deaths
+urlfile="https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv"
+
+jh_dea <- read_csv(url(urlfile))
+jh_dea <- jh_dea %>% filter(`Country/Region` != "Canada")
+jh_dea <- gather(jh_dea, key = "date", value = "deaths", "1/22/20" : "5/3/20")
+jh_dea$date <- as.Date(jh_dea$date, "%m/%d/%y")
+
+
+#Fr recovered
+urlfile="https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_recovered_global.csv"
+
+jh_rec <- read_csv(url(urlfile))
+jh_rec <- jh_rec %>% filter(`Country/Region` != "Canada")
+jh_rec <- gather(jh_rec, key = "date", value = "recovered", "1/22/20" : "5/3/20")
+jh_rec$date <- as.Date(jh_rec$date, "%m/%d/%y")
+
+jh_df <- bind_cols(jh_con, jh_dea[6], jh_rec[6])
+jh_df$active <- jh_df$confirmed -  jh_df$recovered # -ve output
+```
