@@ -1,0 +1,258 @@
+```{r}
+library(tidyverse)
+library(tidycovid19)
+library(paletteer)
+library(ggplot2)
+library(delabj)
+library(patchwork)
+library(socviz)
+library(tsibble)
+library(feasts)
+library(timeDate)
+library(lubridate)
+library(here)
+library(janitor)
+library(ggrepel)
+library(ggtext)
+```
+
+#Some function for later use
+```{r}
+is_max <- function(x) {
+  seq_along(x) == which.max(x)
+}
+
+my_colors <- function(palette="cb"){
+### The palette with black:
+  cb.palette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+  ## Same one Reversed
+  rcb.palette <- rev(cb.palette)
+  ## Blue and yellow first choices
+  bly.palette <- c("#E69F00", "#0072B2", "#000000", "#56B4E9", "#009E73", "#F0E442", "#D55E00", "#CC79A7")
+  if (palette=="cb") return(cb.palette) else if (palette=="rcb") return(rcb.palette) else if (palette=="bly") return(bly.palette) else stop("Choose cb, rcb, or bly ony.")
+}
+
+
+
+coalesce_join <- function(x, y, 
+                          by = NULL, suffix = c(".x", ".y"), 
+                          join = dplyr::full_join, ...) {
+    joined <- join(x, y, by = by, suffix = suffix, ...)
+    # names of desired output
+    cols <- dplyr::union(names(x), names(y))
+    
+    to_coalesce <- names(joined)[!names(joined) %in% cols]
+    suffix_used <- suffix[ifelse(endsWith(to_coalesce, suffix[1]), 1, 2)]
+    # remove suffixes and deduplicate
+    to_coalesce <- unique(substr(
+        to_coalesce, 
+        1, 
+        nchar(to_coalesce) - nchar(suffix_used)
+    ))
+    
+    coalesced <- purrr::map_dfc(to_coalesce, ~dplyr::coalesce(
+        joined[[paste0(.x, suffix[1])]], 
+        joined[[paste0(.x, suffix[2])]]
+    ))
+    names(coalesced) <- to_coalesce
+    
+    dplyr::bind_cols(joined, coalesced)[cols]
+}
+
+```
+
+```{r}
+covid_raw <- suppressWarnings(read_csv("~/COVID-19-geographic-disbtribution-worldwide-2020-05-03.csv", na = "NULL"))
+```
+
+```{r}
+covid <- covid_raw %>%
+  mutate(date = lubridate::dmy(dateRep)) %>% 
+  filter(cases != -9)
+
+colnames(covid)[7] <- "countries_and_territories"
+colnames(covid)[8] <- "geo_id"
+```
+
+
+```{r}
+df <- covid %>% select(5,6,7,12)
+```
+
+
+```{r}
+dea <- aggregate(df$deaths, list(df$date), sum)
+colnames(dea) <- c("date", "deaths")
+con <- aggregate(df$cases, list(df$date), sum)
+colnames(con) <- c("date", "confirmed")
+
+
+df <- bind_cols(dea, con[2])
+```
+
+```{r}
+df <- df %>% 
+  mutate(weekend = isWeekend(date),
+         holiday = isHoliday(as.timeDate(date), listHolidays())) %>%
+  mutate(max_day = ifelse(is_max(deaths), date, NA),
+         max_day = as_date(max_day))
+```
+
+```{r}
+df_long <- gather(df, key = "mode", value = "index", "deaths" : "confirmed")
+
+df_long$mode[df_long$mode == "confirmed"] <- "New cases"
+df_long$mode[df_long$mode == "deaths"] <- "New deaths"
+```
+
+
+```{r}
+ww <- 
+  df_long %>% 
+  filter(date >= as.Date("2020-03-05")) %>%
+ # mutate(mode = recode(mode, `confirmed` = "New cases",
+  #                      `deaths` = "New deaths")) %>%
+
+ggplot(df_long, mapping = aes(x = date, y = index,
+                                      group = mode, color = mode)) +
+geom_vline(data = subset(df_long, weekend == TRUE),
+             mapping = aes(xintercept = date),
+             color = my_colors("bly")[5], size = 3, alpha = 0.1) +
+  geom_line(size = 1.1) +
+#  geom_text_repel(aes(label = format(max_day, format = "%a %b %d")),
+ #                 size = rel(2), nudge_x = 1, show.legend = FALSE) +
+  scale_color_manual(name = "", values = c("New cases" = "#83B692", "New deaths" = "#721121")) +
+   facet_wrap(~mode, nrow = 1, scales = "free") +
+  theme_delabj() +
+labs(x = "", y = "",
+       color = "Mode",
+       title = "Daily new COVID-19 <b, style = 'color:#83B692'>cases</b> & <b, style = 'color:#721121'>deaths</b>",
+       subtitle = "Global scale",
+       caption = "") +
+  theme(legend.position = "top",
+        text = element_text(size = 12, family="ITC Officina Sans LT Book"),
+        legend.text = element_text(size = 14),
+       plot.title.position = "plot",
+          plot.title = element_markdown(size = 21, family="ITC Officina Sans LT Bold"),
+          plot.subtitle = element_text(size = 15),
+          plot.caption = element_text(hjust = 0, size = rel(1)),
+          # turn off the strip label and tighten the panel spacing
+          strip.text = element_blank(),
+          axis.text.x = element_text(size=12),
+          axis.text.y = element_text(size=12),
+       panel.grid.major = element_blank(),
+       panel.grid.minor = element_blank(),
+          panel.spacing.x = unit(-0.05, "lines"),
+          panel.spacing.y = unit(0.3, "lines"),
+          axis.title.x = element_text(size = 10),
+          axis.title.y = element_text(size = 10))
+
+```
+
+
+
+
+
+**For USA**
+```{r}
+urlfile="https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv"
+
+nytdata <- read_csv(url(urlfile))
+
+write.csv(nytdata, file = "/Volumes/My Passport for Mac/R/convid-19/15 May 20/nytimes/nytdata.csv", row.names = FALSE)
+```
+
+```{python}
+import csv
+
+with open('/Volumes/My Passport for Mac/R/convid-19/15 May 20/nytimes/nytdata.csv') as f:
+    reader = csv.DictReader(f)
+    lines = [line for line in reader]
+
+for prev_day, day in zip(lines, lines[1:]):
+    day['new_cases'] = int(day['cases']) - int(prev_day['cases'])
+    day['new_deaths'] = int(day['deaths']) - int(prev_day['deaths'])
+
+import datetime
+
+for line in lines:
+    line['day'] = datetime.datetime.strptime(line['date'],
+                                             '%Y-%m-%d').strftime('%A')
+
+with open('/Volumes/My Passport for Mac/R/convid-19/15 May 20/nytimes/data.csv', 'w') as f:
+    writer = csv.DictWriter(f, lines[1].keys())
+    writer.writeheader()
+    writer.writerows(lines[1:])
+```
+
+    
+```{r}
+nytdata <- suppressWarnings(read_csv(
+  "/Volumes/My Passport for Mac/R/convid-19/15 May 20/nytimes/data.csv", na = "NULL"))
+```
+
+
+```{r}
+nytdf <- nytdata %>% 
+  mutate( weekend = isWeekend(date),
+         holiday = isHoliday(as.timeDate(date), listHolidays())) %>%
+  mutate(max_day = ifelse(is_max(deaths), date, NA),
+         max_day = as_date(max_day))
+```
+
+```{r}
+nyt_long <- gather(nytdf, key = "mode", value = "index", "new_cases" : "new_deaths")
+
+nyt_long$mode[nyt_long$mode == "new_cases"] <- "New cases"
+nyt_long$mode[nyt_long$mode == "new_deaths"] <- "New deaths"
+```
+
+```{r}
+usa <- 
+  nyt_long %>% 
+  filter(date >= as.Date("2020-03-05")) %>%
+ggplot(nyt_long, mapping = aes(x = date, y = index,
+                                      group = mode, color = mode)) +
+geom_vline(data = subset(nyt_long, weekend == TRUE),
+             mapping = aes(xintercept = date),
+             color = my_colors("bly")[5], size = 3, alpha = 0.1) +
+  geom_line(size = 1.1) +
+ # geom_text_repel(aes(label = format(max_day, format = "%a %b %d")),
+  #                size = rel(2), nudge_x = 1, show.legend = FALSE) +
+  #scale_color_delabj(name = "") +
+  scale_color_manual(name = "", values = c("New cases" = "#83B692", "New deaths" = "#721121")) +
+  #scale_y_log10() +
+  theme_delabj() +
+  facet_wrap(~mode, nrow = 1, scales = "free") +
+labs(x = "", y = "",
+       color = "Mode",
+       title = "Daily new CVID-19 <b, style = 'color:#83B692'>cases</b> & <b, style = 'color:#721121'>deaths</b>",
+       subtitle = "USA focus", #Data till 6 Apr
+       caption = "Source: NYTimes; ECDC\nwww.fishwongy.com") +
+  theme(legend.position = "top",
+        text = element_text(size = 12, family="ITC Officina Sans LT Book"),
+       plot.title.position = "plot",
+          plot.title = element_markdown(size = 21, family="ITC Officina Sans LT Bold"),
+          plot.subtitle = element_text(size = 15),
+          plot.caption = element_text(hjust = 0, size = 15),
+          plot.caption.position = "plot",
+          # turn off the strip label and tighten the panel spacing
+          strip.text = element_blank(),
+          axis.text.x = element_text(size=12),
+          axis.text.y = element_text(size=12),
+       panel.grid.major = element_blank(),
+       panel.grid.minor = element_blank(),
+          panel.spacing.x = unit(-0.05, "lines"),
+          panel.spacing.y = unit(0.3, "lines"),
+          axis.title.x = element_text(size = 10),
+          axis.title.y = element_text(size = 10),
+          legend.text = element_text(size = 14))
+
+```
+
+
+
+```{r}
+ww / usa +
+   ggsave("/Volumes/My Passport for Mac/R/convid-19/15 May 20/photo/WkendDea_patch.png", dpi = 320, width = 10.8, height = 12)
+```
