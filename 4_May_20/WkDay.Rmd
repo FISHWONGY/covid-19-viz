@@ -1,0 +1,113 @@
+#DFs used from prev rmd
+
+```{r}
+df$day <- weekdays(as.Date(df$date))
+
+df_dea <- aggregate(df$deaths, list(df$day), sum)
+colnames(df_dea) <- c("day", "Deaths")
+
+df_con <- aggregate(df$confirmed, list(df$day), sum)
+colnames(df_con) <- c("day", "Confirmed")
+df_wk <- bind_cols(df_dea, df_con[2])
+df_wk <- gather(df_wk, key = "metric", value = "count", "Deaths" : "Confirmed")
+  
+  
+df_wk$per_cent <- df_wk$count/ sum(df_wk$count) *100
+df_wk$day <- as.factor(df_wk$day)
+df_wk$day <- factor(df_wk$day,levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"))
+```
+
+```{r}
+glo_wk <- 
+  df_wk %>%
+ggplot(aes(x = day, y = count, fill = metric)) +
+  geom_bar(stat = 'identity') +
+  #geom_bar(group = 1, stat = "identity", fill = "#83B692") + 
+  #geom_density(size = 1, color = "#FF6666") +
+  theme_delabj() +
+  scale_fill_manual(name = "", values = c("Confirmed" = "#83B692", "Deaths" = "#721121")) +
+  facet_wrap(~metric, scales = "free", nrow = 1) +
+  labs(x = "", y = "",
+       #color = "Mode",
+       title = "Cumulated <b, style = 'color:#83B692'>cases</b> & <b, style = 'color:#721121'>deaths</b> on each weekday",
+       subtitle = "Global scale", #Data till 6 Apr
+       caption = "") + #Source: NYTimes\nwww.fishwongy.com
+  theme(legend.position = "top",
+        text = element_text(size = 12, family="ITC Officina Sans LT Book"),
+       plot.title.position = "plot",
+          plot.title = element_markdown(size = 21, family="ITC Officina Sans LT Bold"),
+          plot.subtitle = element_text(size = 15),
+          plot.caption = element_text(hjust = 0, size = 15),
+          plot.caption.position = "plot",
+          # turn off the strip label and tighten the panel spacing
+          strip.text = element_blank(),
+          axis.text.x = element_text(size=12),
+          axis.text.y = element_text(size=12),
+       panel.grid.major = element_blank(),
+       panel.grid.minor = element_blank(),
+          panel.spacing.x = unit(-0.05, "lines"),
+          panel.spacing.y = unit(0.3, "lines"),
+          axis.title.x = element_text(size = 10),
+          axis.title.y = element_text(size = 10),
+          legend.text = element_text(size = 14))
+```
+
+
+
+
+```{r}
+nytdata$count <- 1
+nyt_dea <- aggregate(nytdata$deaths, list(nytdata$day), sum)
+colnames(nyt_dea) <- c("day", "Deaths")
+
+nyt_con <- aggregate(nytdata$cases, list(nytdata$day), sum)
+colnames(nyt_con) <- c("day", "Confirmed") 
+nyt_wk <- bind_cols(nyt_dea, nyt_con[2])
+nyt_wk <- gather(nyt_wk, key = "metric", value = "count", "Deaths" : "Confirmed")
+  
+nyt_wk$per_cent <- nyt_wk$count/ sum(nyt_wk$count) *100
+nyt_wk$day <- as.factor(nyt_wk$day)
+nyt_wk$day <- factor(nyt_wk$day,levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"))
+```
+
+```{r}
+usa_wk <- 
+  nyt_wk %>%
+ggplot(aes(x = day, y = count, fill = metric)) +
+  geom_bar(stat = 'identity') +
+  #geom_bar(group = 1, stat = "identity", fill = "#83B692") + 
+  #geom_density(size = 1, color = "#FF6666") +
+  theme_delabj() +
+  #scale_fill_delabj(name = "", breaks = c("Deaths", "Confirmed")) +
+  scale_fill_manual(name = "", values = c("Confirmed" = "#83B692", "Deaths" = "#721121")) +
+  facet_wrap(~metric, scales = "free", nrow = 1) +
+  labs(x = "", y = "",
+       #color = "Mode",
+       title = "Cumulated <b, style = 'color:#83B692'>cases</b> & <b, style = 'color:#721121'>deaths</b> on each weekday",
+       subtitle = "USA focus", #Data till 6 Apr
+       caption = "Source: NYTimes; ECDC\nwww.fishwongy.com") + #Source: NYTimes; ECDC\nwww.fishwongy.com
+  theme(legend.position = "top",
+        text = element_text(size = 12, family="ITC Officina Sans LT Book"),
+       plot.title.position = "plot",
+          plot.title = element_markdown(size = 21, family="ITC Officina Sans LT Bold"),
+          plot.subtitle = element_text(size = 15),
+          plot.caption = element_text(hjust = 0, size = 15),
+          plot.caption.position = "plot",
+          # turn off the strip label and tighten the panel spacing
+          strip.text = element_blank(),
+          axis.text.x = element_text(size=12),
+          axis.text.y = element_text(size=12),
+       panel.grid.major = element_blank(),
+       panel.grid.minor = element_blank(),
+          panel.spacing.x = unit(-0.05, "lines"),
+          panel.spacing.y = unit(0.3, "lines"),
+          axis.title.x = element_text(size = 10),
+          axis.title.y = element_text(size = 10),
+          legend.text = element_text(size = 14))
+```
+
+
+```{r}
+(glo_wk / usa_wk) +
+   ggsave("/Volumes/My Passport for Mac/R/convid-19/15 May 20/photo/WkDea_patch2.png", dpi = 320, width = 11.8, height = 12)
+```
