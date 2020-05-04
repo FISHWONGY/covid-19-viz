@@ -16,7 +16,7 @@ library(ggrepel)
 library(ggtext)
 ```
 
-#Some function for later use
+#Some functions for later use
 ```{r}
 is_max <- function(x) {
   seq_along(x) == which.max(x)
@@ -159,13 +159,13 @@ urlfile="https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-state
 
 nytdata <- read_csv(url(urlfile))
 
-write.csv(nytdata, file = "/Volumes/My Passport for Mac/R/convid-19/15 May 20/nytimes/nytdata.csv", row.names = FALSE)
+write.csv(nytdata, file = "nytdata.csv", row.names = FALSE)
 ```
 
 ```{python}
 import csv
 
-with open('/Volumes/My Passport for Mac/R/convid-19/15 May 20/nytimes/nytdata.csv') as f:
+with open('nytdata.csv') as f:
     reader = csv.DictReader(f)
     lines = [line for line in reader]
 
@@ -179,7 +179,7 @@ for line in lines:
     line['day'] = datetime.datetime.strptime(line['date'],
                                              '%Y-%m-%d').strftime('%A')
 
-with open('/Volumes/My Passport for Mac/R/convid-19/15 May 20/nytimes/data.csv', 'w') as f:
+with open('data.csv', 'w') as f:
     writer = csv.DictWriter(f, lines[1].keys())
     writer.writeheader()
     writer.writerows(lines[1:])
@@ -188,7 +188,7 @@ with open('/Volumes/My Passport for Mac/R/convid-19/15 May 20/nytimes/data.csv',
     
 ```{r}
 nytdata <- suppressWarnings(read_csv(
-  "/Volumes/My Passport for Mac/R/convid-19/15 May 20/nytimes/data.csv", na = "NULL"))
+  "data.csv", na = "NULL"))
 ```
 
 
@@ -254,5 +254,5 @@ labs(x = "", y = "",
 
 ```{r}
 ww / usa +
-   ggsave("/Volumes/My Passport for Mac/R/convid-19/15 May 20/photo/WkendDea_patch.png", dpi = 320, width = 10.8, height = 12)
+   ggsave("WkendDea_patch.png", dpi = 320, width = 10.8, height = 12)
 ```
