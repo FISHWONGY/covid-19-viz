@@ -374,3 +374,253 @@ ggplot(aes(x = day, y = count, fill = metric)) +
 (glo_wk / usa_wk) +
    ggsave("WkDea_patch2.png", dpi = 320, width = 11.8, height = 12)
 ```
+
+
+
+
+
+
+
+#Adding Active cases & Daily confirm (world-wide/ USA)
+```{r}
+merged <- download_merged_data(cached = TRUE, silent = TRUE)
+merged <- merged %>% select(1:6)
+merged$active <- merged$confirmed - merged$recovered
+```
+
+```{r}
+merged %>% 
+  filter(date >= as.Date("2020-02-01")) %>%
+   filter(country %in% c("Italy", "Germany", "France", "Portugal", "US", "United Kingdom", "Spain", "Netherlands", "Korea, South")) %>%
+  mutate(end_label = ifelse(date == max(date) - 1, country, NA),
+         country = recode(country, `United Kingdom` = "UK",
+                          `Korea, South` = "Korea")) %>%
+ # mutate(mode = recode(mode, `confirmed` = "New cases",
+  #                      `deaths` = "New deaths")) %>%
+
+ggplot(aes(x = date, y = active, label = end_label)) +
+  geom_line(size = 1.1, color = "#83B692") +
+  #geom_text(nudge_x = -6.5,
+   #               nudge_y = -5020.4,
+                  #segment.color = NA,
+    #              color = "#721121",
+     #             size = 5,
+      #            family="ITC Officina Sans LT Bold") + 
+  theme_delabj() +
+  scale_y_continuous(position = "right") +
+  facet_wrap(~country, scales = "free", nrow = 3) +
+labs(x = "", y = "",
+     title = "'We are past the peak'\n",  
+     #title = "Daily new COVID-19 <b, style = 'color:#83B692'>cases</b> & <b, style = 'color:#721121'>deaths</b>",
+       subtitle = "<b, style = 'color:#83B692'>**Active cases**</b> over time\n",
+       caption = "Source: NYTimes; ECDC\nwww.fishwongy.com") +
+  theme(legend.position = "top",
+        text = element_text(size = 12, family="ITC Officina Sans LT Book"),
+        legend.text = element_text(size = 14),
+       plot.title.position = "plot",
+        plot.title = element_markdown(size = 26, family="ITC Officina Sans LT Bold"),
+        plot.subtitle = element_markdown(size = 20),
+        plot.caption = element_text(size = 16),
+        plot.caption.position = "plot", 
+          # turn off the strip label and tighten the panel spacing
+        strip.text = element_text(family = "ITC Officina Sans LT Bold", size = 18, color = "#721121"),
+          axis.text.x = element_text(size=12, family="ITC Officina Sans LT Bold"),
+          axis.text.y = element_text(size=13, family = "ITC Officina Sans LT Bold"),
+       panel.background = element_blank(),
+       #panel.grid.major.x = element_blank(),
+       panel.grid.minor = element_blank(),
+          panel.spacing.x = unit(-0.05, "lines"),
+          panel.spacing.y = unit(0.3, "lines"),
+          axis.title.x = element_text(size = 10),
+          axis.title.y = element_text(size = 10)) +
+   ggsave("~/peak.png", dpi = 320, width = 12.8, height = 12)
+```
+
+#Daily confirm cases (Area graph), covid is from the prev Rmd w/ ECDC data
+```{r}
+covid2 <- covid %>% select(5,6,7,12)
+colnames(covid2)[3] <- "country"
+```
+```{r}
+covid2 %>% 
+  filter(date >= as.Date("2020-02-15") & cases >= 0) %>%
+  mutate(country = recode(country, `United_Kingdom` = "UK",
+                        `United_States_of_America` = "USA",
+                        `South_Korea` = "Korea")) %>%
+  filter(country %in% c("Italy", "Germany", "France", "Portugal", "USA", "UK", "Spain", "Netherlands", "Korea")) %>%
+  mutate(end_label = ifelse(date == max(date) - 2, country, NA),
+         end_label = recode(end_label, `United Kingdom` = "UK")) %>%
+
+
+ggplot(aes(x = date, y = cases, label = end_label)) +
+  geom_bar(stat = "identity", width = 1, fill = "#83B692") +
+ # geom_text(nudge_x = -10.5,
+  #          nudge_y = 1020.4,
+                  #segment.color = NA,
+   #               color = "#721121",
+    #              size = 6,
+     #             family="ITC Officina Sans LT Bold") + 
+  theme_delabj() +
+  scale_y_continuous(position = "right") +
+  facet_wrap(~country, scales = "free", nrow = 3) +
+labs(x = "", y = "",
+     title = "'We are past the peak'\n",  
+     #title = "Daily new COVID-19 <b, style = 'color:#83B692'>cases</b> & <b, style = 'color:#721121'>deaths</b>",
+       subtitle = "<b, style = 'color:#83B692'>**Daily confirmed cases**</b> over time\n",
+       caption = "Source: NYTimes; ECDC\nwww.fishwongy.com") +
+  theme(legend.position = "top",
+        text = element_text(size = 12, family="ITC Officina Sans LT Book"),
+        legend.text = element_text(size = 14),
+       plot.title.position = "plot",
+        plot.title = element_markdown(size = 26, family="ITC Officina Sans LT Bold"),
+        plot.subtitle = element_markdown(size = 20),
+        plot.caption = element_text(size = 16),
+        plot.caption.position = "plot", 
+          # turn off the strip label and tighten the panel spacing
+        strip.text = element_text(family = "ITC Officina Sans LT Bold", size = 18, color = "#721121"),
+        axis.text.x = element_text(size=12, family="ITC Officina Sans LT Bold"),
+        axis.text.y = element_text(size=14, family="ITC Officina Sans LT Bold"),
+       panel.background = element_blank(),
+       #panel.grid.major.x = element_blank(),
+       panel.grid.minor = element_blank(),
+          panel.spacing.x = unit(-0.05, "lines"),
+          panel.spacing.y = unit(0.3, "lines"),
+          axis.title.x = element_text(size = 10),
+          axis.title.y = element_text(size = 10)) +
+   ggsave("~/confirm.png", dpi = 320, width = 12.8, height = 14)
+```
+
+#US states daily confirm case
+```{r}
+urlfile="https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv"
+
+nytdata <- read_csv(url(urlfile))
+
+write.csv(nytdata, file = "/Volumes/My Passport for Mac/R/convid-19/15 May 20/nytimes/nytdata.csv", row.names = FALSE)
+```
+
+```{python}
+import csv
+
+with open('~/nytdata.csv') as f:
+    reader = csv.DictReader(f)
+    lines = [line for line in reader]
+
+for prev_day, day in zip(lines, lines[1:]):
+    day['new_cases'] = int(day['cases']) - int(prev_day['cases'])
+    day['new_deaths'] = int(day['deaths']) - int(prev_day['deaths'])
+
+import datetime
+
+for line in lines:
+    line['day'] = datetime.datetime.strptime(line['date'],
+                                             '%Y-%m-%d').strftime('%A')
+
+with open(~/data.csv', 'w') as f:
+    writer = csv.DictWriter(f, lines[1].keys())
+    writer.writeheader()
+    writer.writerows(lines[1:])
+```
+
+```{r}
+nytdata <- suppressWarnings(read_csv(
+  "~/data.csv", na = "NULL"))
+```
+
+#US state daily confirm case
+```{r}
+nytdata %>% 
+  filter(date >= as.Date("2020-02-15") & new_cases >= 31) %>%
+ggplot(aes(x = date, y = new_cases)) +
+  geom_bar(stat = "identity", width = 1, fill = "#83B692") +
+ # geom_text(nudge_x = -10.5,
+  #          nudge_y = 1020.4,
+                  #segment.color = NA,
+   #               color = "#721121",
+    #              size = 6,
+        #             family="ITC Officina Sans LT Bold") + 
+  theme_delabj() +
+  scale_y_continuous(position = "right") +
+  facet_wrap(~state, scales = "free", nrow = 6) +
+labs(x = "", y = "",
+     title = "<b, style = 'color:#83B692'>**Daily confirmed cases**</b> over time\n",  
+     #title = "Daily new COVID-19 <b, style = 'color:#83B692'>cases</b> & <b, style = 'color:#721121'>deaths</b>",
+       subtitle = "Top 30 <b, style = 'color:#721121'>US state</b>",
+       caption = "Source: NYTimes\nwww.fishwongy.com") +
+  theme(legend.position = "top",
+        text = element_text(size = 12, family="ITC Officina Sans LT Book"),
+        legend.text = element_text(size = 14),
+       plot.title.position = "plot",
+        plot.title = element_markdown(size = 30, family="ITC Officina Sans LT Bold"),
+        plot.subtitle = element_markdown(size = 23),
+        plot.caption = element_text(size = 16),
+        plot.caption.position = "plot", 
+          # turn off the strip label and tighten the panel spacing
+        strip.text = element_text(family = "ITC Officina Sans LT Bold", size = 18, color = "#721121"),
+        axis.text.x = element_text(size=12, family="ITC Officina Sans LT Bold"),
+        axis.text.y = element_text(size=14, family="ITC Officina Sans LT Bold"),
+       panel.background = element_blank(),
+       #panel.grid.major.x = element_blank(),
+       panel.grid.minor = element_blank(),
+          panel.spacing.x = unit(-0.05, "lines"),
+          panel.spacing.y = unit(0.3, "lines"),
+          axis.title.x = element_text(size = 10),
+          axis.title.y = element_text(size = 10)) +
+   ggsave("~/us_state.png", dpi = 320, width = 18.8, height = 18)
+```
+
+
+
+
+
+
+
+
+
+
+
+#Aggregate global by dplyr
+```{r}
+#glo_act <- 
+  merged %>% 
+  filter(date >= as.Date("2020-02-01")) %>%
+  group_by(date) %>%
+  summarise(sum_active = sum(active)) %>%   #Gpby + summarise = aggre
+  ungroup() %>%
+  mutate(end_label = ifelse(date == max(date) - 1, "Global", NA)) %>%
+ # mutate(mode = recode(mode, `confirmed` = "New cases",
+  #                      `deaths` = "New deaths")) %>%
+
+ggplot(aes(x = date, y = sum_active, label = end_label)) +
+  geom_line(size = 1.1, color = "#83B692") +
+  geom_text_repel(nudge_x = -1.1,
+                  nudge_y = -520.4,
+                  #segment.color = NA,
+                  color = "#721121",
+                  size = 3,
+                  family="ITC Officina Sans LT Bold") + 
+  theme_delabj() +
+ # facet_wrap(~country, scales = "free", nrow = 2) +
+labs(x = "", y = "",
+     title = "'We are past the peaek'",  
+     #title = "Daily new COVID-19 <b, style = 'color:#83B692'>cases</b> & <b, style = 'color:#721121'>deaths</b>",
+       subtitle = "<b, style = 'color:#83B692'>Active cases</b> over time\n",
+       caption = "") +
+  theme(legend.position = "top",
+        text = element_text(size = 12, family="ITC Officina Sans LT Book"),
+        legend.text = element_text(size = 14),
+       plot.title.position = "plot",
+          plot.title = element_markdown(size = 21, family="ITC Officina Sans LT Bold"),
+          plot.subtitle = element_markdown(size = 15),
+          plot.caption = element_text(hjust = 0, size = rel(1)),
+          # turn off the strip label and tighten the panel spacing
+          strip.text = element_blank(),
+          axis.text.x = element_text(size=12),
+          axis.text.y = element_text(size=12),
+       panel.grid.major = element_blank(),
+       panel.grid.minor = element_blank(),
+          panel.spacing.x = unit(-0.05, "lines"),
+          panel.spacing.y = unit(0.3, "lines"),
+          axis.title.x = element_text(size = 10),
+          axis.title.y = element_text(size = 10))
+```
