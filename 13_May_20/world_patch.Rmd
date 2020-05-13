@@ -46,7 +46,7 @@ coalesce_join <- function(x, y,
 merged <- download_merged_data(cached = TRUE, silent = TRUE)
 ```
 
-**NEW WAY TO CALCULATE daily cases**
+**CALCULATE daily cases**
 ```{r}
 merged <- merged %>% 
             mutate(new_cases = ecdc_cases - lag(ecdc_cases),
