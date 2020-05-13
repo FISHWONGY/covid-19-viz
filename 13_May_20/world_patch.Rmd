@@ -247,11 +247,6 @@ geom_vline(data = subset(df_long, weekend == TRUE),
              mapping = aes(xintercept = date),
              color = "#b8627dff", size = 3, alpha = 0.1) +
   geom_line(size = 1.1, color = "#a65c85ff") +
- # geom_text_repel(aes(label = format(max_day, format = "%a %b %d")),
-  #                size = rel(2), nudge_x = 1, show.legend = FALSE) +
-  #scale_color_delabj(name = "") +
-  #scale_color_manual(name = "", values = c("New cases" = "#83B692", "New deaths" = "#721121")) +
-  #scale_y_log10() +
   theme_delabj_dark() +
   #facet_wrap(~mode, nrow = 1, scales = "free") +
 labs(x = "", y = "",
@@ -284,11 +279,7 @@ glo_wk_d <-
   filter(metric == "Deaths") %>%
 ggplot(aes(x = day, y = count)) +
   geom_bar(stat = 'identity', fill = "#a65c85ff") +
-  #geom_bar(group = 1, stat = "identity", fill = "#83B692") + 
-  #geom_density(size = 1, color = "#FF6666") +
   theme_delabj_dark() +
-  #scale_fill_manual(name = "", values = c("Confirmed" = "#83B692", "Deaths" = "#721121")) +
-  #facet_wrap(~metric, scales = "free", nrow = 1) +
   labs(x = "", y = "",
        title = "Cumulated <b, style = 'color:#a65c85ff'>COVID-19 deaths</b> on each weekday",
        subtitle = "Global scale", #Data till 6 Apr
