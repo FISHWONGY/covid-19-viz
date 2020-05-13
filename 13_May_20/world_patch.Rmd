@@ -1,0 +1,328 @@
+```{r}
+is_max <- function(x) {
+  seq_along(x) == which.max(x)
+}
+
+my_colors <- function(palette="cb"){
+### The palette with black:
+  cb.palette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+  ## Same one Reversed
+  rcb.palette <- rev(cb.palette)
+  ## Blue and yellow first choices
+  bly.palette <- c("#E69F00", "#0072B2", "#000000", "#56B4E9", "#009E73", "#F0E442", "#D55E00", "#CC79A7")
+  if (palette=="cb") return(cb.palette) else if (palette=="rcb") return(rcb.palette) else if (palette=="bly") return(bly.palette) else stop("Choose cb, rcb, or bly ony.")
+}
+
+
+
+coalesce_join <- function(x, y, 
+                          by = NULL, suffix = c(".x", ".y"), 
+                          join = dplyr::full_join, ...) {
+    joined <- join(x, y, by = by, suffix = suffix, ...)
+    # names of desired output
+    cols <- dplyr::union(names(x), names(y))
+    
+    to_coalesce <- names(joined)[!names(joined) %in% cols]
+    suffix_used <- suffix[ifelse(endsWith(to_coalesce, suffix[1]), 1, 2)]
+    # remove suffixes and deduplicate
+    to_coalesce <- unique(substr(
+        to_coalesce, 
+        1, 
+        nchar(to_coalesce) - nchar(suffix_used)
+    ))
+    
+    coalesced <- purrr::map_dfc(to_coalesce, ~dplyr::coalesce(
+        joined[[paste0(.x, suffix[1])]], 
+        joined[[paste0(.x, suffix[2])]]
+    ))
+    names(coalesced) <- to_coalesce
+    
+    dplyr::bind_cols(joined, coalesced)[cols]
+}
+
+```
+
+```{r}
+merged <- download_merged_data(cached = TRUE, silent = TRUE)
+```
+
+**NEW WAY TO CALCULATE daily cases**
+```{r}
+merged <- merged %>% 
+            mutate(new_cases = ecdc_cases - lag(ecdc_cases),
+                   new_deaths = ecdc_deaths - lag(ecdc_deaths)) %>%
+           filter(!is.na(new_cases), !is.na(new_deaths)) %>%
+           filter(new_cases >= 0 & new_deaths >= 0)
+```
+
+```{r}
+df <- merged %>% select(1:3, 7,8, 36:37)
+```
+
+```{r}
+wc_day <- 
+  map_covid19(merged, type = "confirmed", per_capita = F) + 
+  theme_delabj_dark() +
+  scale_fill_continuous(name = "Daily cases change",
+                        type = "viridis",
+                        #option = "inferno",
+                        trans = "log10",
+                        direction = -1,
+                        na.value = "gray80",
+                        #breaks = c(1e-03, 1e-01, 1e+01), label = c(0.001, 0.01, 10),
+                        guide = ggplot2::guide_colorbar(direction = "horizontal",
+                                                        barheight = ggplot2::unit(2, units = "mm"),
+                                                        barwidth = ggplot2::unit(100, units = "mm"),
+                                                        draw.ulim = FALSE,
+                                                        title.position = 'top',
+                                                        title.hjust = 0.5,
+                                                        title.vjust = 0.5)) +
+  theme(text = element_text(family="ITC Officina Sans LT Book"),
+        axis.text = element_blank(), 
+        axis.ticks = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+         plot.title = element_markdown(size = 21, family="ITC Officina Sans LT Bold"),
+        plot.caption = element_text(hjust = 0, size = 10, family="ITC Officina Sans LT Book")) +
+  labs(x = "", y = "",
+       title = "New <b, style = 'color:#83B692'>COVID-19 case</b> per day",
+      caption = "") #Source: Johns Hopkins CSSE; ECDC. Data till 13 May 2020\nwww.fishwongy.com
+```
+
+```{r}
+dea <- aggregate(df$new_deaths, list(df$date), sum)
+colnames(dea) <- c("date", "deaths")
+con <- aggregate(df$new_cases, list(df$date), sum)
+colnames(con) <- c("date", "confirmed")
+
+
+df <- bind_cols(dea, con[2])
+```
+
+```{r}
+df <- df %>% 
+  mutate(weekend = isWeekend(date),
+         holiday = isHoliday(as.timeDate(date), listHolidays())) %>%
+  mutate(max_day = ifelse(is_max(deaths), date, NA),
+         max_day = as_date(max_day))
+```
+
+```{r}
+df_long <- gather(df, key = "mode", value = "index", "deaths" : "confirmed")
+
+df_long$mode[df_long$mode == "confirmed"] <- "New cases"
+df_long$mode[df_long$mode == "deaths"] <- "New deaths"
+```
+
+```{r}
+ww <- 
+  df_long %>% 
+  filter(mode == "New cases") %>%
+  filter(date >= as.Date("2020-03-05")) %>%
+ggplot(df_long, mapping = aes(x = date, y = index,
+                                      group = mode)) +
+geom_vline(data = subset(df_long, weekend == TRUE),
+             mapping = aes(xintercept = date),
+             color = my_colors("bly")[5], size = 3, alpha = 0.1) +
+  geom_line(size = 1.1, color = "#83B692") +
+ # geom_text_repel(aes(label = format(max_day, format = "%a %b %d")),
+  #                size = rel(2), nudge_x = 1, show.legend = FALSE) +
+  #scale_color_delabj(name = "") +
+  #scale_color_manual(name = "", values = c("New cases" = "#83B692", "New deaths" = "#721121")) +
+  #scale_y_log10() +
+  theme_delabj_dark() +
+  #facet_wrap(~mode, nrow = 1, scales = "free") +
+labs(x = "", y = "",
+       title = "Daily new <b, style = 'color:#83B692'>COVID-19 cases</b>",
+       subtitle = "Global scale", #Data till 6 Apr
+       caption = "Source: Johns Hopkins CSSE; ECDC. Data till 13 May 2020\nwww.fishwongy.com") + #Source: NYTimes; ECDC. Data till 12 May 2020\nwww.fishwongy.com
+  theme(text = element_text(size = 12, family="ITC Officina Sans LT Book"),
+        plot.title.position = "plot",
+          plot.title = element_markdown(size = 21, family="ITC Officina Sans LT Bold"),
+          plot.subtitle = element_text(size = 15),
+          plot.caption = element_text(hjust = 0, size = 15),
+          plot.caption.position = "plot",
+          # turn off the strip label and tighten the panel spacing
+          strip.text = element_blank(),
+          axis.text.x = element_text(size=12),
+          axis.text.y = element_text(size=12),
+       panel.grid.major = element_blank(),
+       panel.grid.minor = element_blank(),
+          panel.spacing.x = unit(-0.05, "lines"),
+          panel.spacing.y = unit(0.3, "lines"),
+          axis.title.x = element_text(size = 10),
+          axis.title.y = element_text(size = 10),
+          legend.text = element_text(size = 14))
+
+```
+
+```{r}
+df$day <- weekdays(as.Date(df$date))
+
+df_dea <- aggregate(df$deaths, list(df$day), sum)
+colnames(df_dea) <- c("day", "Deaths")
+
+df_con <- aggregate(df$confirmed, list(df$day), sum)
+colnames(df_con) <- c("day", "Confirmed")
+df_wk <- bind_cols(df_dea, df_con[2])
+#df_wk$d_pc <- df_wk$Deaths/ sum(df_wk$Deaths) *100
+#df_wk$c_pc <- df_wk$Confirmed/ sum(df_wk$Confirmed) *100
+df_wk <- gather(df_wk, key = "metric", value = "count", "Deaths" : "Confirmed")
+  
+  
+
+df_wk$day <- as.factor(df_wk$day)
+df_wk$day <- factor(df_wk$day,levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"))
+```
+
+```{r}
+glo_wk <- 
+  df_wk %>%
+  filter(metric == "Confirmed") %>%
+ggplot(aes(x = day, y = count)) +
+  geom_bar(stat = 'identity', fill = "#83B692") +
+  #geom_bar(group = 1, stat = "identity", fill = "#83B692") + 
+  #geom_density(size = 1, color = "#FF6666") +
+  theme_delabj_dark() +
+  #scale_fill_manual(name = "", values = c("Confirmed" = "#83B692", "Deaths" = "#721121")) +
+  #facet_wrap(~metric, scales = "free", nrow = 1) +
+  labs(x = "", y = "",
+       title = "Cumulated <b, style = 'color:#83B692'>COVID-19 cases</b> on each weekday",
+       subtitle = "Global scale", #Data till 6 Apr
+       caption = "") + #Source: NYTimes; ECDC. Data till 12 May 2020\nwww.fishwongy.com
+  theme(text = element_text(size = 12, family="ITC Officina Sans LT Book"),
+       plot.title.position = "plot",
+          plot.title = element_markdown(size = 21, family="ITC Officina Sans LT Bold"),
+          plot.subtitle = element_text(size = 15),
+          plot.caption = element_text(hjust = 0, size = 15),
+          plot.caption.position = "plot",
+          # turn off the strip label and tighten the panel spacing
+          strip.text = element_blank(),
+          axis.text.x = element_text(size=12),
+          axis.text.y = element_text(size=12),
+       panel.grid.major = element_blank(),
+       panel.grid.minor = element_blank(),
+          panel.spacing.x = unit(-0.05, "lines"),
+          panel.spacing.y = unit(0.3, "lines"),
+          axis.title.x = element_text(size = 10),
+          axis.title.y = element_text(size = 10),
+          legend.text = element_text(size = 14))
+```
+
+```{r}
+(wc_day)/ (ww | glo_wk) + 
+   ggsave("ww_patch/ww_case_patch.png", dpi = 320, width = 12.8, height = 12)
+```
+
+
+
+```{r}
+wd_day <- 
+  map_covid19(merged, type = "deaths", per_capita = F) + 
+  theme_delabj_dark() +
+  scale_fill_continuous(name = "Daily deaths change",
+                        type = "viridis",
+                        option = "inferno",
+                        trans = "log10",
+                        direction = -1,
+                        na.value = "gray80",
+                        #breaks = c(1e-03, 1e-01, 1e+01), label = c(0.001, 0.01, 10),
+                        guide = ggplot2::guide_colorbar(direction = "horizontal",
+                                                        barheight = ggplot2::unit(2, units = "mm"),
+                                                        barwidth = ggplot2::unit(100, units = "mm"),
+                                                        draw.ulim = FALSE,
+                                                        title.position = 'top',
+                                                        title.hjust = 0.5,
+                                                        title.vjust = 0.5)) +
+  theme(text = element_text(family="ITC Officina Sans LT Book"),
+        axis.text = element_blank(), 
+        axis.ticks = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+         plot.title = element_markdown(size = 21, family="ITC Officina Sans LT Bold"),
+        plot.caption = element_text(hjust = 0, size = 10, family="ITC Officina Sans LT Book")) +
+  labs(x = "", y = "",
+       title = "New <b, style = 'color:#a65c85ff'>COVID-19 deaths</b> per day",
+      caption = "") #Source: Johns Hopkins CSSE; ECDC. Data till 13 May 2020\nwww.fishwongy.com
+```
+
+```{r}
+ww_d <- 
+  df_long %>% 
+  filter(mode == "New deaths") %>%
+  filter(date >= as.Date("2020-03-05")) %>%
+ggplot(df_long, mapping = aes(x = date, y = index,
+                                      group = mode)) +
+geom_vline(data = subset(df_long, weekend == TRUE),
+             mapping = aes(xintercept = date),
+             color = "#b8627dff", size = 3, alpha = 0.1) +
+  geom_line(size = 1.1, color = "#a65c85ff") +
+ # geom_text_repel(aes(label = format(max_day, format = "%a %b %d")),
+  #                size = rel(2), nudge_x = 1, show.legend = FALSE) +
+  #scale_color_delabj(name = "") +
+  #scale_color_manual(name = "", values = c("New cases" = "#83B692", "New deaths" = "#721121")) +
+  #scale_y_log10() +
+  theme_delabj_dark() +
+  #facet_wrap(~mode, nrow = 1, scales = "free") +
+labs(x = "", y = "",
+       title = "Daily new <b, style = 'color:#a65c85ff'>COVID-19 deaths</b>",
+       subtitle = "Global scale", #Data till 6 Apr
+       caption = "Source: Johns Hopkins CSSE; ECDC. Data till 13 May 2020\nwww.fishwongy.com") + #Source: NYTimes; ECDC. Data till 12 May 2020\nwww.fishwongy.com
+  theme(text = element_text(size = 12, family="ITC Officina Sans LT Book"),
+        plot.title.position = "plot",
+          plot.title = element_markdown(size = 21, family="ITC Officina Sans LT Bold"),
+          plot.subtitle = element_text(size = 15),
+          plot.caption = element_text(hjust = 0, size = 15),
+          plot.caption.position = "plot",
+          # turn off the strip label and tighten the panel spacing
+          strip.text = element_blank(),
+          axis.text.x = element_text(size=12),
+          axis.text.y = element_text(size=12),
+       panel.grid.major = element_blank(),
+       panel.grid.minor = element_blank(),
+          panel.spacing.x = unit(-0.05, "lines"),
+          panel.spacing.y = unit(0.3, "lines"),
+          axis.title.x = element_text(size = 10),
+          axis.title.y = element_text(size = 10),
+          legend.text = element_text(size = 14))
+
+```
+
+```{r}
+glo_wk_d <- 
+  df_wk %>%
+  filter(metric == "Deaths") %>%
+ggplot(aes(x = day, y = count)) +
+  geom_bar(stat = 'identity', fill = "#a65c85ff") +
+  #geom_bar(group = 1, stat = "identity", fill = "#83B692") + 
+  #geom_density(size = 1, color = "#FF6666") +
+  theme_delabj_dark() +
+  #scale_fill_manual(name = "", values = c("Confirmed" = "#83B692", "Deaths" = "#721121")) +
+  #facet_wrap(~metric, scales = "free", nrow = 1) +
+  labs(x = "", y = "",
+       title = "Cumulated <b, style = 'color:#a65c85ff'>COVID-19 deaths</b> on each weekday",
+       subtitle = "Global scale", #Data till 6 Apr
+       caption = "") + #Source: NYTimes; ECDC. Data till 12 May 2020\nwww.fishwongy.com
+  theme(text = element_text(size = 12, family="ITC Officina Sans LT Book"),
+       plot.title.position = "plot",
+          plot.title = element_markdown(size = 21, family="ITC Officina Sans LT Bold"),
+          plot.subtitle = element_text(size = 15),
+          plot.caption = element_text(hjust = 0, size = 15),
+          plot.caption.position = "plot",
+          # turn off the strip label and tighten the panel spacing
+          strip.text = element_blank(),
+          axis.text.x = element_text(size=12),
+          axis.text.y = element_text(size=12),
+       panel.grid.major = element_blank(),
+       panel.grid.minor = element_blank(),
+          panel.spacing.x = unit(-0.05, "lines"),
+          panel.spacing.y = unit(0.3, "lines"),
+          axis.title.x = element_text(size = 10),
+          axis.title.y = element_text(size = 10),
+          legend.text = element_text(size = 14))
+```
+
+```{r}
+(wd_day)/ (ww_d | glo_wk_d) + 
+   ggsave("ww_patch/ww_death_patch.png", dpi = 320, width = 12.8, height = 12)
+```
