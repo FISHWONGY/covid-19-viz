@@ -125,8 +125,6 @@ geom_vline(data = subset(df_long, weekend == TRUE),
              mapping = aes(xintercept = date),
              color = my_colors("bly")[5], size = 3, alpha = 0.1) +
   geom_line(size = 1.1, color = "#83B692") +
- # geom_text_repel(aes(label = format(max_day, format = "%a %b %d")),
-  #                size = rel(2), nudge_x = 1, show.legend = FALSE) +
   #scale_color_delabj(name = "") +
   #scale_color_manual(name = "", values = c("New cases" = "#83B692", "New deaths" = "#721121")) +
   #scale_y_log10() +
