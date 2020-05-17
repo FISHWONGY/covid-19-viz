@@ -139,7 +139,60 @@ GCM_master %>%
     legend.position = "none"
   )
 
+#To change y-axis to percentage
+GCM_master3 <- GCM_master2
+GCM_master3$smoothed <- GCM_master3$smoothed/100
 
+              
+ft <- GCM_master3 %>%
+  # Plot moving average (or raw data) vs date
+  ggplot(aes(x = date, y = smoothed)) +
+  # Add a dark grid line for zero on the y-asix
+  geom_hline(yintercept = 0) +
+  # Draw one line per country
+  geom_line(aes(col = country_code), size = 0.5) +
+  
+  # Add a highlight for a country of focus, first adding a thicker white line to create a border behind the main one
+  geom_line(size = 1.5, data = . %>% filter(country_code == "GB"), col = "white") +
+  geom_line(size = 1, data = . %>% filter(country_code == "GB"), col = "black") +
+  
+  # Add country labels to the end of each line
+  geom_text_repel(aes(col = country_code, label = country_code), direction = "y", 
+                  data = . %>% group_by(country_code, measure) %>% top_n(1, date), hjust = 0,
+                  family = "ITC Officina Sans LT Book") +
+  # Clean up the x-axis
+ scale_x_date(limits = c(as.Date("2020-02-21"), as.Date("2020-04-14")), 
+               breaks = c(as.Date("2020-02-22"), as.Date("2020-04-05")), 
+               labels = function(x)format(x,"%d %b")) +
+  
+  # Duplicate y-axis for easy reading of values
+  scale_y_continuous(limits = c(-1, 0.4), breaks = seq(-0.8, 0.4, 0.2), expand = c(0,0), 
+                     sec.axis = dup_axis(),
+                     labels = scales::percent_format(accuracy = 1)) +
+  
+  # Small multiples: one chart per topic
+  facet_wrap(~measure, nrow = 1) +
+  
+  # Clean up the plot theme
+  #theme_minimal() +
+  theme_delabj() +
+  scale_color_delabj() +
+  labs(x = "\nDate",
+       title = "Mobility change over time(selected coutries)",
+       subtitle = "By destination") +
+  theme(
+    text = element_text(size = 12, family="ITC Officina Sans LT Book"),
+    axis.title.x = element_text(family = "ITC Officina Sans LT Bold"),
+    plot.title = element_text(size = 15, face = "bold", family="ITC Officina Sans LT Bold"),
+    plot.subtitle = element_text(hjust = 0, vjust = 2.5,family="ITC Officina Sans LT Book"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    axis.ticks = element_line(),
+    axis.title = element_blank(),
+    legend.position = "none"
+  )
+
+              
 
 # Apple map
 
