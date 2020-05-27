@@ -1,0 +1,68 @@
+```{r}
+#### Hex map
+library(geojsonio)
+library(rgeos)
+library(gganimate)
+library(transformr)
+```
+
+```{r}
+spdf <- geojson_read("us_states_hexgrid.geojson", what = "sp")
+spdf@data = spdf@data %>%
+  mutate(google_name = gsub(" \\(United States\\)", "", google_name))
+spdf_fortified <- tidy(spdf, region = "google_name")
+centers <- cbind.data.frame(data.frame(gCentroid(spdf, byid=TRUE), id=spdf@data$iso3166_2))
+```
+
+
+```{r}
+urlfile="https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv"
+
+nytdata <- read_csv(url(urlfile))
+
+
+
+nytdata <- nytdata %>% 
+  filter(date == max(date, na.rm = T))
+
+```
+
+```{r}
+data <- spdf_fortified %>%
+  left_join(nytdata,  by=c("id"="state")) 
+```
+
+```{r} 
+ ggplot() +
+  geom_polygon(data = data, aes( x = long, y = lat,  fill=cases, group = group), color="white") +
+  geom_text(data=centers, aes(x=x, y=y, label=id), color = "gray75", family="ITC Officina Sans LT Bold", size = 5) + #D6D6D6
+  coord_map()+
+  scale_fill_viridis(#option = "magma", 
+                     direction = -1, name = "Confirmed cases",trans="log10",
+                     #limits = c(1,20000), #breaks = c(1, 500, 1000, 1500, 10000),
+                     breaks = c(1e+03, 1e+04, 1e+05),
+                     labels = c("1,000", "10,000", "100,000"),
+                     guide = guide_colorbar(#order = 2,
+                                            direction = "horizontal", 
+                                            barheight = unit(2, units = "mm"),
+                                            barwidth = unit(50, units = "mm"),
+                                            draw.ulim = F, title.position = 'top', 
+                                            title.hjust = 0.5, label.hjust = 0.5)) +
+                                            #label = F)) +
+  theme_delabj_dark() +
+  labs(title = "<b style = 'color:#3cbb75ff'>Covid-19 cases</b> in the US", x="", y="",
+      subtitle = "Data aggregated till 27 May 2020",
+       caption = "Source: NYTimes\nwww.fishwongy.com") +
+  # removing unnecessary graph elements
+    theme(legend.position="top",
+          legend.title = element_text(size = 13), 
+          legend.text = element_text(size = 13),
+        text = element_text(size = 6.5, family="ITC Officina Sans LT Book"),
+        axis.text = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        plot.title = element_markdown(size = 25, family="ITC Officina Sans LT Bold"),
+        plot.subtitle = element_text(hjust = 0, vjust = -2, size = 18),
+        plot.caption = element_text(hjust = 0, size = 15, family="ITC Officina Sans LT Bold")) 
+  #ggsave("photo/hex/us_case.png", dpi = 320, width = 10.8, height = 8)
+```
