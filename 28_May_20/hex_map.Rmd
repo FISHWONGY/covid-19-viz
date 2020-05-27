@@ -37,9 +37,7 @@ data <- spdf_fortified %>%
   geom_polygon(data = data, aes( x = long, y = lat,  fill=cases, group = group), color="white") +
   geom_text(data=centers, aes(x=x, y=y, label=id), color = "gray75", family="ITC Officina Sans LT Bold", size = 5) + #D6D6D6
   coord_map()+
-  scale_fill_viridis(#option = "magma", 
-                     direction = -1, name = "Confirmed cases",trans="log10",
-                     #limits = c(1,20000), #breaks = c(1, 500, 1000, 1500, 10000),
+  scale_fill_viridis(direction = -1, name = "Confirmed cases",trans="log10",
                      breaks = c(1e+03, 1e+04, 1e+05),
                      labels = c("1,000", "10,000", "100,000"),
                      guide = guide_colorbar(#order = 2,
