@@ -1,0 +1,176 @@
+```{r}
+library(COVID19)
+library(tidyverse)
+library(tidycovid19)
+library(paletteer)
+library(ggplot2)
+library(delabj)
+library(patchwork)
+library(socviz)
+library(lubridate)
+library(magrittr)
+```
+
+```{r}
+covid_deaths <- covid19(verbose = FALSE) %>%
+  ungroup() %>% 
+  mutate(Week = week(date)) %>% 
+  select(Country = id, Date = date, Week, Deaths = deaths, Population = population) %>% 
+  filter(Date < today() %>% add(days(-2))) %>% 
+  mutate(Deaths_by_1Mpop = round(Deaths/Population*1e6)) 
+```
+
+```{r}
+get_top_countries_df <- function(covid_deaths, top_by, top_n, since){
+  covid_deaths %>% 
+    group_by(Date) %>% 
+    top_n(100, Population) %>% 
+    group_by(Country) %>% 
+    filter(Date == max(Date)) %>% 
+    ungroup() %>% 
+    top_n(top_n, {{top_by}}) %>% 
+    select(Country) %>% 
+    inner_join(covid_deaths, ., by = "Country") %>% 
+    filter(Date >= ymd(since))
+}
+```
+
+
+```{r, message=FALSE}
+df <- readr::read_csv("https://www.mortality.org/Public/STMF/Outputs/stmf.csv", skip=1)
+deaths <- df %>% 
+  rename(Deaths = DTotal) %>% 
+  filter(Sex == "b") %>% 
+  select(CountryCode, Year, Week, Deaths) %>% 
+  mutate(CountryCode = recode(CountryCode,
+                              "DEUTNP" = "DEU",
+                              "GBRTENW" = "GBR"),
+         Country = recode(CountryCode, 
+                          "AUT" = "Austria",
+                          "BEL" = "Belgium",
+                          "DNK" = "Denmark",
+                          "ESP" = "Spain", 
+                          "GBR" = "Great Britain",
+                          "DEU" = "Germany", 
+                          "NLD" = "Netherlands", 
+                          "PRT" = "Portugal", 
+                          "SWE" = "Sweden")) %>% 
+  filter(!CountryCode %in% c("FIN", "NOR", "USA", "ISL")) 
+mean_deaths <- deaths %>% 
+  filter(Year != 2020) %>% 
+  group_by(Country, Week) %>% 
+  summarise(Mean_deaths = Deaths %>% mean() %>% round()) %>% 
+  ungroup() 
+deaths2 <- deaths %>% 
+  left_join(mean_deaths, by = c("Country", "Week")) %>% 
+  mutate(Excess_deaths = Deaths - Mean_deaths) 
+```
+
+```{r, fig.width = 10, fig.height = 6}
+deaths2 %>% 
+  filter(!Country %in% c("BGR", "CZE", "SVK", "ITA", "HUN", "FRATNP")) %>%
+  ggplot() + 
+  geom_line(aes(Week, Deaths, group = Year), col = "lightblue", alpha = .75) + 
+  geom_line(aes(Week, Mean_deaths), col = "steelblue", size = .75, alpha = .8) + 
+  geom_line(data = . %>% filter(Year == 2020), aes(Week, Deaths), col = "darkorange", size = 1.1) + 
+  facet_wrap(~Country, scales = "free") + 
+  labs(caption = "Source: The Human Mortality Database\nwww.fishwongy.com",
+       title = "Weekly deaths <b style = 'color:darkorange'>in 2020</b> vs 
+                <span style = 'color:#84b3c2'>past years</span> and 
+                <b style = 'color:steelblue'>their mean</b>",
+       subtitle = "Data till 7 June, 2020") +
+  theme_minimal() + 
+  theme(text = element_text(size = 8.5, family="ITC Officina Sans LT Book"),
+        strip.text = element_text(size = 15, family = "ITC Officina Sans LT Bold"),
+        axis.title.x = element_text(size = 12),
+        axis.title.y = element_blank(),
+        axis.text = element_text(size = 12),
+       # panel.grid = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.title.position = "plot",
+        plot.caption.position = "plot",
+        plot.title = ggtext::element_markdown(size = 16, family = "ITC Officina Sans LT Bold"),
+        plot.subtitle = element_text(size = 11),
+        plot.caption = element_text(size = 10)
+  ) +
+   ggsave("photo/excess death/excess_death.png", dpi = 320, width = 10, height = 6)
+  NULL
+```
+
+
+# From covid19 pkg
+```{r}
+covid_deaths <- covid19(verbose = FALSE) %>%
+  ungroup() %>% 
+  mutate(Week = week(date)) %>% 
+  select(Country = id, Date = date, Week, Deaths = deaths, Population = population) %>% 
+  filter(Date < today() %>% add(days(-2))) %>% 
+  mutate(Deaths_by_1Mpop = round(Deaths/Population*1e6)) 
+```
+
+##### To calculate the excess ratio, comparing the cumulative deaths from this and previous years is needed.
+
+```{r}
+deaths3 <- deaths2 %>% 
+  filter(Year == 2020, Week >= 9, Excess_deaths >= 0) %>%
+  group_by(Country) %>% 
+  mutate(Cum_mean_deaths = cumsum(Mean_deaths),
+         Cum_excess_deaths = cumsum(Excess_deaths),
+         Max_week = max(Week),
+         Max_excess_deaths = max(Excess_deaths)) %>% 
+  top_n(1, Week) %>%
+  mutate(ExcessRatio = round(100*Cum_excess_deaths/Cum_mean_deaths, 1)) %>% 
+  select(Country, Year, Week, ExcessRatio, Max_week, Max_excess_deaths) %>% 
+  left_join(deaths2, ., by = c("Year", "Week", "Country"))
+covid_weekly_deaths <- covid_deaths %>%
+  rename(Cum_deaths = Deaths) %>% 
+  filter(Country %in% c("AUT", "BEL", "DNK", "DEU", "GBR", "NLD", "PRT", "ESP", "SWE")) %>% 
+  group_by(Country) %>% 
+  mutate(Cum_deaths_lag = lag(Cum_deaths, 1),
+         Deaths = Cum_deaths - Cum_deaths_lag) %>% 
+  group_by(Country, Week) %>% 
+  summarise(Covid_deaths = sum(Deaths)) %>% 
+  ungroup() %>% 
+  na.omit() %>% 
+  rename(CountryCode = Country) %>% 
+  mutate(Year = 2020)
+deaths4 <- deaths3 %>% 
+  left_join(covid_weekly_deaths, by = c("CountryCode", "Year", "Week"))
+```
+
+##### Lastly, I will plot the excess of deaths of this year compared to the mean of previous years and to the official COVID deaths.
+
+```{r, fig.width = 10, fig.height = 6}
+deaths4  %>% 
+  filter(!Country %in% c("BGR", "CZE", "SVK", "ITA", "HUN", "FRATNP")) %>%
+  ggplot() +
+  geom_line(aes(Week, Excess_deaths, group = Year), col = "lightblue", alpha = .75) +
+  geom_line(data = . %>% filter(Year == 2020), aes(Week, Excess_deaths), col = "darkorange", size = 1) +
+  geom_line(data = . %>% filter(Year == 2020), aes(Week, Covid_deaths), col = "red", size = 1, na.rm = T) +
+  geom_area(data = . %>% filter(Year == 2020, Week >= 9, Excess_deaths > 0), aes(Week, Excess_deaths),
+            fill = "darkorange", size = 1, alpha = .15) +
+  geom_hline(yintercept = 0, size = 0.75, col = "steelblue") +
+  geom_label(aes(Max_week+7, exp(log(Max_excess_deaths)/1.2), label = paste0("+", ExcessRatio, "%")),
+             color = "darkorange", na.rm = T, fontface = "bold", size = 3.5, alpha = .5) +
+  facet_wrap(~Country, scales = "free") + 
+  labs(title = "<b style = 'color:darkorange'>Excess</b> deaths vs 
+                <b style = 'color:red'>reported COVID</b> deaths",
+       subtitle = "<b style = 'color:darkorange'>Ratio</b> shows death increase respect to last years average",
+       caption = "Source: The Human Mortality Database; COVID-19 Data Hub\nwww.fishwongy.com") +
+  theme_minimal() + 
+  theme(text = element_text(size = 8.5, family="ITC Officina Sans LT Book"),
+        strip.text = element_text(size = 15,  family = "ITC Officina Sans LT Bold"),
+        axis.title.x = element_text(size = 12),
+        axis.title.y = element_blank(),
+        axis.text = element_text(size = 12),
+        #panel.grid = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.title = ggtext::element_markdown(size = 16,  family = "ITC Officina Sans LT Bold"),
+        plot.title.position = "plot",
+        plot.subtitle = ggtext::element_markdown(size = 11), 
+        plot.caption = element_text(size = 10), 
+        plot.caption.position = "plot"
+  ) +
+   ggsave("photo/excess death/excess_percent.png", dpi = 320, width = 10, height = 6)
+  NULL
+```
