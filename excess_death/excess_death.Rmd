@@ -94,7 +94,7 @@ deaths2 %>%
         plot.caption = element_text(size = 10)
   ) +
    ggsave("photo/excess death/excess_death.png", dpi = 320, width = 10, height = 6)
-  NULL
+  
 ```
 
 
